@@ -1,6 +1,6 @@
-<title>DataDash</title>
+<title>DataDash Analytics</title>
 <!-- Desenvolvido por Aparecido – DataDash -->
-<meta name="author" content="Aparecido – DataDash" />
+<meta name="author" content="Aparecido – DataDash" /
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -60,7 +60,7 @@
   <header>
     <div class="title">
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" style="transform:translateY(1px)"><rect x="3" y="3" width="6" height="18" rx="1" fill="#2563eb"/><rect x="9.5" y="8" width="6" height="13" rx="1" fill="#60a5fa"/><rect x="16" y="12" width="5" height="9" rx="1" fill="#93c5fd"/></svg>
-      <div>DataDash</div>
+      <div>DataDash Analytics</div>
     </div>
     <div class="actions">
       <button class="btn" id="btnLogin">Login</button>
@@ -115,9 +115,16 @@
         </div>
         <div class="small muted">Dica: escolha colunas e clique em "Atualizar Visualizações".</div>
         <div style="margin-top:10px" class="footer-actions">
-          <button class="btn" id="btnUpdate">Atualizar Visualizações</button>
-          <button class="btn secondary" id="btnClear">Limpar Dados</button>
-        </div>
+  <button class="btn" id="btnUpdate">Atualizar Visualizações</button>
+
+  <button class="btn" id="btnSmartDashboard">
+    ✨ Gerar Dashboard Inteligente
+  </button>
+
+  <button class="btn secondary" id="btnClear">
+    Limpar Dados
+  </button>
+</div>
       </div>
 
       <div class="section">
@@ -199,6 +206,11 @@
           <div>
             <h3 style="margin:0">Painel</h3>
             <div class="small muted">KPIs, gráficos interativos, mapa e tabela dinâmica</div>
+
+            <button class="btn" id="btnDashboardInteligente" 
+style="margin-top:10px;background:#16a34a;font-size:16px;padding:12px 20px;">
+✨ Gerar Dashboard Inteligente
+</button>
           </div>
           <div class="toolbar">
             <input id="searchGlobal" type="text" placeholder="Pesquisar global..." />
@@ -233,7 +245,15 @@
           <div class="value" id="kpiStd">-</div>
         </div>
       </div>
+      <div class="section" id="insightsArea">
 
+    
+
+    <div id="insightsContent">
+        Aguardando análise dos dados...
+    </div>
+
+</div>
       <div class="section charts-grid" id="chartsArea">
         <!-- Visualizações serão adicionadas dinamicamente -->
       </div>
@@ -319,9 +339,9 @@
   }
 
   function getUsers() {
-    try { return JSON.parse(localStorage.getItem('copilot_users') || '{}'); } catch(e){ return {}; }
+    try { return JSON.parse(localStorage.getItem('_users') || '{}'); } catch(e){ return {}; }
   }
-  function saveUsers(u){ localStorage.setItem('copilot_users', JSON.stringify(u)); }
+  function saveUsers(u){ localStorage.setItem('DataDash_users', JSON.stringify(u)); }
 
   document.getElementById('btnLogin').addEventListener('click', () => {
     document.getElementById('authModal').style.display = 'block';
@@ -804,13 +824,13 @@
   document.getElementById('btnSaveState').addEventListener('click', () => {
     if (!requireAuth('Salvar Estado')) return;
     const payload = { visuals: state.visuals, filters: state.filters, currentSheet: state.currentSheet };
-    localStorage.setItem('copilot_pro_state', JSON.stringify(payload));
+    localStorage.setItem('DataDash_pro_state', JSON.stringify(payload));
     showToast('Dashboard salvo localmente');
   });
 
   document.getElementById('btnLoadState').addEventListener('click', () => {
     if (!requireAuth('Carregar Estado')) return;
-    const raw = localStorage.getItem('copilot_pro_state');
+    const raw = localStorage.getItem('datadash_state');
     if (!raw) { showToast('Nenhum estado salvo localmente'); return; }
     try {
       const obj = JSON.parse(raw);
@@ -823,72 +843,564 @@
     } catch (err) { showToast('Erro ao carregar estado: ' + err.message); }
   });
 
-  // ---------- UI events ----------
-  document.getElementById('btnUpdate').addEventListener('click', () => { applyAllFiltersAndRefresh(); showToast('Visualizações atualizadas'); });
-  document.getElementById('btnClear').addEventListener('click', () => {
-    state.rawSheets = {}; state.currentSheet = null; state.data = []; state.columns = []; state.filters = []; state.visuals = [];
-    clearChildren(sheetSelect); clearChildren(dimSelect); clearChildren(measureSelect); clearChildren(filterColumnSelect);
-    document.getElementById('chartsArea').innerHTML = ''; renderAppliedFilters(); updateKPIsAndTable(); showToast('Dados limpos');
-  });
+ state.visuals.forEach(v => renderVisual(v));
 
-  document.getElementById('btnAddViz').addEventListener('click', () => {
-    const type = document.getElementById('chartTypeSelect').value;
-    const dim = dimSelect.value;
-    const measure = measureSelect.value;
-    const agg = aggSelect.value;
-    if (type === 'map') {
-      // map requires lat/lon columns
-      const latCol = document.getElementById('mapLatCol').value.trim();
-      const lonCol = document.getElementById('mapLonCol').value.trim();
-      if (!latCol || !lonCol) { showToast('Informe colunas lat e lon para mapa'); return; }
-      addVisualization('map', latCol, lonCol, agg);
-      return;
+// ---------- MOTOR INTELIGENTE DATADASH ----------
+
+function analisarEstruturaDados(){
+
+    const resultado = {
+        numericas: [],
+        categorias: [],
+        datas: [],
+        vazias: []
+    };
+
+
+    if(!state.data || state.data.length === 0){
+        return resultado;
     }
-    if (!dim || !measure) { showToast('Selecione dimensão e métrica'); return; }
-    addVisualization(type, dim, measure, agg);
-  });
 
-  document.getElementById('btnExportPNG').addEventListener('click', () => {
-    const firstCanvas = document.querySelector('#chartsArea canvas');
-    if (!firstCanvas) { showToast('Nenhum gráfico para exportar'); return; }
-    exportChartPNG(firstCanvas.id, 'chart.png');
-  });
 
-  document.getElementById('btnExportCSV').addEventListener('click', exportTableCSV);
-  document.getElementById('btnDownloadExcel').addEventListener('click', exportExcel);
+    state.columns.forEach(coluna => {
 
-  document.getElementById('btnResetView').addEventListener('click', () => { state.visuals.forEach(v => renderVisual(v)); showToast('Visualizações resetadas'); });
 
-  document.getElementById('btnExportAll').addEventListener('click', () => {
-    if (!requireAuth('Exportar Tudo')) return;
-    document.getElementById('btnExportState').click();
-    exportTableCSV();
-    showToast('Exportações iniciadas');
-  });
+        const valores = state.data
+            .map(r => r[coluna])
+            .filter(v => v !== null && v !== undefined && v !== "");
 
-  document.getElementById('searchGlobal').addEventListener('input', (e) => {
-    const q = e.target.value.trim().toLowerCase();
-    if (!q) { applyAllFiltersAndRefresh(); return; }
-    const rows = (state.rawSheets[state.currentSheet] || []).map(r => { const obj={}; Object.keys(r).forEach(k=>obj[String(k).trim()]=r[k]); return obj; });
-    state.data = rows.filter(row => Object.values(row).some(v => safeText(v).toLowerCase().includes(q)));
-    updateKPIsAndTable();
-    state.visuals.forEach(v => renderVisual(v));
-  });
 
-  // ---------- Init ----------
-  function init() {
-    createOption(sheetSelect, '', '-- Nenhum arquivo --');
-    createOption(dimSelect, '', '-- Selecione --');
-    createOption(measureSelect, '', '-- Selecione --');
-    createOption(filterColumnSelect, '', '-- Selecione --');
-    renderAppliedFilters();
-    showToast('DataDash carregado com sucesso - Aparecido');
-  }
+        if(valores.length === 0){
+            resultado.vazias.push(coluna);
+            return;
+        }
 
-  init();
-  </script>
-  <footer style="text-align:center; margin-top:20px; font-size:14px; color:#555;">
-    Desenvolvido por Aparecido Wagner Manoel - DataDash
-  </footer>
+
+        let numeros = 0;
+        let datas = 0;
+
+
+        valores.forEach(v => {
+
+
+            if(
+                (typeof v === "string" && !isNaN(Date.parse(v))) ||
+                v instanceof Date
+            ){
+
+                datas++;
+
+            }
+
+            else if(typeof v === "number"){
+
+                numeros++;
+
+            }
+
+            else if(!isNaN(Number(v))){
+
+                numeros++;
+
+            }
+
+
+        });
+
+
+
+        if(numeros / valores.length >= 0.8){
+
+            resultado.numericas.push(coluna);
+
+        }
+
+        else if(datas / valores.length >= 0.8){
+
+            resultado.datas.push(coluna);
+
+        }
+
+        else{
+
+            resultado.categorias.push(coluna);
+
+        }
+
+
+    });
+
+
+    return resultado;
+
+}
+
+
+
+
+function escolherMelhorDimensao(info){
+
+    return info.categorias.length > 0
+        ? info.categorias[0]
+        : "";
+
+}
+
+
+
+
+
+function escolherMelhorMetrica(info){
+
+
+    if(info.numericas.length === 0){
+        return "";
+    }
+
+
+    const prioridades = [
+        "faturamento",
+        "receita",
+        "valor",
+        "vendas",
+        "total",
+        "preco",
+        "preço",
+        "quantidade"
+    ];
+
+
+    for(let termo of prioridades){
+
+
+        const encontrada = info.numericas.find(col =>
+            col.toLowerCase().includes(termo)
+        );
+
+
+        if(encontrada){
+            return encontrada;
+        }
+
+
+    }
+
+
+    return info.numericas[0];
+
+}
+
+
+
+
+function escolherMelhorData(info){
+
+    return info.datas.length > 0
+        ? info.datas[0]
+        : "";
+
+}
+
+
+// ---------- INSIGHTS AUTOMÁTICOS DATADASH ----------
+
+function gerarInsightsAutomaticos(dimensao, metrica){
+
+    const area = document.getElementById("insightsContent");
+
+    if(!area){
+        return;
+    }
+
+
+    if(!dimensao || !metrica){
+
+        area.innerHTML = `
+        🧠 <b>Analista IA DataDash</b>
+        <br><br>
+        ⚠️ Não foi possível identificar uma dimensão e uma métrica válidas.
+        `;
+
+        return;
+    }
+
+
+    const agrupado = {};
+
+
+    state.data.forEach(linha => {
+
+        const categoria = linha[dimensao];
+
+        const valor = Number(linha[metrica]) || 0;
+
+
+        if(!categoria){
+            return;
+        }
+
+
+        if(!agrupado[categoria]){
+            agrupado[categoria] = 0;
+        }
+
+
+        agrupado[categoria] += valor;
+
+    });
+
+
+
+    const ranking = Object.entries(agrupado)
+        .sort((a,b)=>b[1]-a[1]);
+
+
+
+    if(ranking.length === 0){
+
+        area.innerHTML = `
+        🧠 <b>Analista IA DataDash</b>
+        <br><br>
+        Sem dados suficientes para análise.
+        `;
+
+        return;
+
+    }
+
+
+
+    const maior = ranking[0];
+
+    const menor = ranking[ranking.length - 1];
+
+
+    const total = ranking.reduce(
+        (soma,item)=>soma + item[1],
+        0
+    );
+
+
+    const percentual = total > 0
+        ? ((maior[1] / total) * 100).toFixed(1)
+        : 0;
+
+
+
+    area.innerHTML = `
+
+    🧠 <b>Analista IA DataDash</b>
+
+    <br><br>
+
+
+    🏆 <b>Líder de desempenho:</b><br>
+
+${maior[0]} apresentou o melhor desempenho em <b>${metrica}</b>,
+com resultado de <b>${maior[1].toLocaleString('pt-BR')}</b>.
+
+
+    <br><br>
+
+
+    📊 <b>Resumo executivo:</b><br>
+
+    Essa categoria representa 
+    <b>${percentual}%</b> do total analisado.
+
+
+    <br><br>
+
+
+    ⚠️ <b>Ponto de atenção:</b><br>
+
+${menor[0]} apresentou o menor desempenho em <b>${metrica}</b>,
+com resultado de <b>${menor[1].toLocaleString('pt-BR')}</b>.
+
+
+    <br><br>
+
+
+    💡 <b>Recomendação:</b><br>
+
+    Avaliar oportunidades de melhoria em 
+<b>${menor[0]}</b> para aumentar o desempenho no indicador analisado.
+
+    `;
+
+}
+function gerarDashboardInteligente(){
+
+    if(!state.data || state.data.length === 0){
+        showToast("Carregue uma planilha primeiro");
+        return;
+    }
+
+
+    const inteligencia = analisarEstruturaDados();
+
+    const dimensao = escolherMelhorDimensao(inteligencia);
+
+    const metrica = escolherMelhorMetrica(inteligencia);
+
+    const data = escolherMelhorData(inteligencia);
+
+    gerarInsightsAutomaticos(dimensao, metrica);
+
+
+    console.log("Análise Inteligente:", inteligencia);
+
+    console.log("Dimensão escolhida:", dimensao);
+
+    console.log("Métrica escolhida:", metrica);
+
+    console.log("Data encontrada:", data);
+
+
+
+    if(dimensao){
+        dimSelect.value = dimensao;
+    }
+
+
+    if(metrica){
+        measureSelect.value = metrica;
+    }
+
+
+    applyAllFiltersAndRefresh();
+
+
+
+    if(dimensao && metrica){
+
+        console.log("Criando gráfico de barras");
+
+        addVisualization(
+            "bar",
+            dimensao,
+            metrica,
+            "sum"
+        );
+
+
+        console.log("Criando gráfico de pizza");
+
+        addVisualization(
+            "pie",
+            dimensao,
+            metrica,
+            "sum"
+        );
+
+    }
+
+
+    showToast(
+        "Dashboard Inteligente criado"
+    );
+
+}
+
+
+
+
+// ---------- GERADOR AUTOMÁTICO DE DASHBOARD ----------
+
+function gerarDashboardInteligente(){
+
+    if(!state.data || state.data.length === 0){
+
+        showToast("Carregue uma planilha primeiro");
+
+        return;
+
+    }
+
+
+
+    const inteligencia = analisarEstruturaDados();
+
+
+    const dimensao = escolherMelhorDimensao(inteligencia);
+
+
+    const metrica = escolherMelhorMetrica(inteligencia);
+
+
+    const data = escolherMelhorData(inteligencia);
+
+
+
+    console.log("Análise Inteligente:", inteligencia);
+
+    console.log("Dimensão escolhida:", dimensao);
+
+    console.log("Métrica escolhida:", metrica);
+
+    console.log("Data encontrada:", data);
+
+
+
+    gerarInsightsAutomaticos(
+        dimensao,
+        metrica
+    );
+
+
+
+    if(dimensao){
+
+        dimSelect.value = dimensao;
+
+    }
+
+
+
+    if(metrica){
+
+        measureSelect.value = metrica;
+
+    }
+
+
+
+    applyAllFiltersAndRefresh();
+
+
+
+    if(dimensao && metrica){
+
+
+        console.log("Criando gráfico de barras");
+
+
+        addVisualization(
+            "bar",
+            dimensao,
+            metrica,
+            "sum"
+        );
+
+
+
+        console.log("Criando gráfico de pizza");
+
+
+        addVisualization(
+            "pie",
+            dimensao,
+            metrica,
+            "sum"
+        );
+
+
+    }
+
+
+
+      showToast(
+        "Dashboard Inteligente criado"
+    );
+
+}
+
+
+// ---------- UI events ----------
+if(document.getElementById('btnDashboardInteligente')){
+    document.getElementById('btnDashboardInteligente').addEventListener('click', gerarDashboardInteligente);
+}
+
+if(document.getElementById('btnUpdate')){
+    document.getElementById('btnUpdate').addEventListener('click', () => { 
+        applyAllFiltersAndRefresh(); 
+        showToast('Visualizações atualizadas'); 
+    });
+}
+
+if(document.getElementById('btnClear')){
+    document.getElementById('btnClear').addEventListener('click', () => {
+        state.rawSheets = {}; state.currentSheet = null; state.data = []; state.columns = []; state.filters = []; state.visuals = [];
+        clearChildren(sheetSelect); clearChildren(dimSelect); clearChildren(measureSelect); clearChildren(filterColumnSelect);
+        document.getElementById('chartsArea').innerHTML = ''; renderAppliedFilters(); updateKPIsAndTable(); showToast('Dados limpos');
+    });
+}
+
+if(document.getElementById('btnAddViz')){
+    document.getElementById('btnAddViz').addEventListener('click', () => {
+        const type = document.getElementById('chartTypeSelect').value;
+        const dim = dimSelect.value;
+        const measure = measureSelect.value;
+        const agg = aggSelect.value;
+        if (type === 'map') {
+            const latCol = document.getElementById('mapLatCol').value.trim();
+            const lonCol = document.getElementById('mapLonCol').value.trim();
+            if (!latCol || !lonCol) { showToast('Informe colunas lat e lon para mapa'); return; }
+            addVisualization('map', latCol, lonCol, agg);
+            return;
+        }
+        if (!dim || !measure) { showToast('Selecione dimensão e métrica'); return; }
+        addVisualization(type, dim, measure, agg);
+    });
+}
+
+if(document.getElementById('btnExportPNG')){
+    document.getElementById('btnExportPNG').addEventListener('click', () => {
+        const firstCanvas = document.querySelector('#chartsArea canvas');
+        if (!firstCanvas) { showToast('Nenhum gráfico para exportar'); return; }
+        exportChartPNG(firstCanvas.id, 'chart.png');
+    });
+}
+
+if(document.getElementById('btnExportCSV')){
+    document.getElementById('btnExportCSV').addEventListener('click', exportTableCSV);
+}
+if(document.getElementById('btnDownloadExcel')){
+    document.getElementById('btnDownloadExcel').addEventListener('click', exportExcel);
+}
+
+if(document.getElementById('btnResetView')){
+    document.getElementById('btnResetView').addEventListener('click', () => { 
+        state.visuals.forEach(v => renderVisual(v)); 
+        showToast('Visualizações resetadas'); 
+    });
+}
+
+if(document.getElementById('btnExportAll')){
+    document.getElementById('btnExportAll').addEventListener('click', () => {
+        if (!requireAuth('Exportar Tudo')) return;
+        document.getElementById('btnExportState').click();
+        exportTableCSV();
+        showToast('Exportações iniciadas');
+    });
+}
+
+if(document.getElementById('searchGlobal')){
+    document.getElementById('searchGlobal').addEventListener('input', (e) => {
+        const q = e.target.value.trim().toLowerCase();
+        if (!q) { applyAllFiltersAndRefresh(); return; }
+        const rows = (state.rawSheets[state.currentSheet] || []).map(r => { const obj={}; Object.keys(r).forEach(k=>obj[String(k).trim()]=r[k]); return obj; });
+        state.data = rows.filter(row => Object.values(row).some(v => safeText(v).toLowerCase().includes(q)));
+        updateKPIsAndTable();
+        state.visuals.forEach(v => renderVisual(v));
+    });
+}
+
+// ---------- Init ----------
+function init() {
+    if(typeof sheetSelect !== 'undefined') createOption(sheetSelect, '', '-- Nenhum arquivo --');
+    if(typeof dimSelect !== 'undefined') createOption(dimSelect, '', '-- Selecione --');
+    if(typeof measureSelect !== 'undefined') createOption(measureSelect, '', '-- Selecione --');
+    if(typeof filterColumnSelect !== 'undefined') createOption(filterColumnSelect, '', '-- Selecione --');
+    if(typeof renderAppliedFilters === 'function') renderAppliedFilters();
+    console.log('DataDash carregado com sucesso - Aparecido');
+}
+init();
+
+</script>
+
+<footer style="text-align:center; margin-top:20px; font-size:14px; color:#555;">
+    Desenvolvido por Aparecido Wagner Manoel - DataDash Analytics
+</footer>
 </body>
 </html>
